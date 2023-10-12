@@ -19,6 +19,8 @@ import macros.*
 import scala.annotation.implicitNotFound
 import sttp.tapir.json.pickler.SubtypeDiscriminator
 import sttp.tapir.generic.Configuration
+import com.github.plokhotnyuk.jsoniter_scala.core.JsonValueCodec
+import com.github.plokhotnyuk.jsoniter_scala.macros.JsonCodecMaker
 
 object Pickler:
 
@@ -115,6 +117,7 @@ object Pickler:
             override lazy val reader = summonInline[Reader[T]]
             override lazy val writer = summonInline[Writer[T]]
           },
+          JsonCodecMaker.make[T],
           summonInline[Schema[T]]
         )
     }
@@ -139,6 +142,7 @@ object Pickler:
         override lazy val writer = summon[Writer[Either[A, B]]]
         override lazy val reader = summon[Reader[Either[A, B]]]
       },
+      null, // TODO
       newSchema
     )
 
@@ -155,6 +159,7 @@ object Pickler:
         override lazy val writer = summon[Writer[Map[String, V]]]
         override lazy val reader = summon[Reader[Map[String, V]]]
       },
+      null, // TODO
       newSchema
     )
 
@@ -182,6 +187,7 @@ object Pickler:
         override lazy val writer = summon[Writer[Map[K, V]]]
         override lazy val reader = summon[Reader[Map[K, V]]]
       },
+      null, // TODO
       newSchema
     )
 
@@ -190,6 +196,7 @@ object Pickler:
       override lazy val writer = summon[Writer[BigDecimal]].comap(jBd => BigDecimal(jBd))
       override lazy val reader = summon[Reader[BigDecimal]].map(bd => bd.bigDecimal)
     },
+    JsonCodecMaker.make[JBigDecimal],
     summon[Schema[JBigDecimal]]
   )
 
@@ -198,6 +205,7 @@ object Pickler:
       override lazy val writer = summon[Writer[BigInt]].comap(jBi => BigInt(jBi))
       override lazy val reader = summon[Reader[BigInt]].map(bi => bi.bigInteger)
     },
+    JsonCodecMaker.make[JBigInteger],
     summon[Schema[JBigInteger]]
   )
 
@@ -274,6 +282,7 @@ object Pickler:
             null
         }
       },
+      null, // TODO
       schema
     )
 
@@ -399,19 +408,23 @@ object Pickler:
 Picklers can be derived automatically by adding: `import sttp.tapir.json.pickler.generic.auto.*`, or manually using `Pickler.derived[T]`.
 The latter is also useful for debugging derivation errors.
 You can find more details in the docs: https://tapir.softwaremill.com/en/latest/endpoint/pickler.html.""")
-case class Pickler[T](innerUpickle: TapirPickle[T], schema: Schema[T]):
+case class Pickler[T](innerUpickle: TapirPickle[T], codec: JsonValueCodec[T], schema: Schema[T]):
 
-  def toCodec: JsonCodec[T] =
+  import com.github.plokhotnyuk.jsoniter_scala.macros._
+  import com.github.plokhotnyuk.jsoniter_scala.core._
+  given JsonValueCodec[T] = codec
+
+  def toCodec: sttp.tapir.Codec.JsonCodec[T] =
     import innerUpickle._
     given innerUpickle.Reader[T] = innerUpickle.reader
     given innerUpickle.Writer[T] = innerUpickle.writer
     given schemaT: Schema[T] = schema
     Codec.json[T] { s =>
-      Try(read[T](s)) match {
+      Try(readFromString[T](s)) match {
         case Success(v) => Value(v)
         case Failure(e) => Error(s, JsonDecodeException(errors = List.empty, e))
       }
-    } { t => write(t) }
+    } { t => writeToString(t) }
 
   def asOption: Pickler[Option[T]] =
     val newSchema = schema.asOption
@@ -422,6 +435,7 @@ case class Pickler[T](innerUpickle: TapirPickle[T], schema: Schema[T]):
         override lazy val writer = summon[Writer[Option[T]]]
         override lazy val reader = summon[Reader[Option[T]]]
       },
+      JsonCodecMaker.make[Option[T]],
       newSchema
     )
 
@@ -434,6 +448,7 @@ case class Pickler[T](innerUpickle: TapirPickle[T], schema: Schema[T]):
         override lazy val writer = summon[Writer[C[T]]]
         override lazy val reader = summon[Reader[C[T]]]
       },
+      JSonCodecMaker.make[List[T]],
       newSchema
     )
 
@@ -446,7 +461,8 @@ case class Pickler[T](innerUpickle: TapirPickle[T], schema: Schema[T]):
         override lazy val writer = summon[Writer[Array[T]]]
         override lazy val reader = summon[Reader[Array[T]]]
       },
+      JSonCodecMaker.make[Array[T]],
       newSchema
     )
 
-given picklerToCodec[T](using p: Pickler[T]): JsonCodec[T] = p.toCodec
+given picklerToCodec[T](using p: Pickler[T]): sttp.tapir.Codec.JsonCodec[T] = p.toCodec

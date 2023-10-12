@@ -870,6 +870,9 @@ lazy val picklerJson: ProjectMatrix = (projectMatrix in file("json/pickler"))
     name := "tapir-json-pickler",
     libraryDependencies ++= Seq(
       "com.lihaoyi" %%% "upickle" % Versions.upickle,
+      "com.github.plokhotnyuk.jsoniter-scala" %%% "jsoniter-scala-core" % Versions.jsoniter,
+      "com.github.plokhotnyuk.jsoniter-scala" %%% "jsoniter-scala-macros" % Versions.jsoniter,
+
       scalaTest.value % Test
     )
   )

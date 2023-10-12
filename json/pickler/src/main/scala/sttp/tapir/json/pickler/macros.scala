@@ -8,6 +8,8 @@ import sttp.tapir.SchemaType.SProduct
 
 import scala.quoted.*
 import compiletime.*
+import com.github.plokhotnyuk.jsoniter_scala.core.JsonValueCodec
+import com.github.plokhotnyuk.jsoniter_scala.macros.JsonCodecMaker
 
 /** Macros, mostly copied from uPickle, and modified to allow our customizations like passing writers/readers as parameters, adjusting
   * encoding/decoding logic to make it coherent with the schema.
@@ -47,6 +49,7 @@ private[pickler] object macros:
                 val encodedName = '{ ${ sProduct }.fields(${ Expr(i) }).name.encodedName }
                 val select = Select.unique(v.asTerm, rawLabel.name).asExprOf[Any]
                 '{
+                  given JsonValueCodec[tpe] = JsonCodecMaker.make  
                   ${ self }.writeSnippetMappedName[R, tpe](
                     ${ ctx },
                     ${ encodedName },
